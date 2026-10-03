@@ -49,9 +49,77 @@
       overflow: hidden;
       box-shadow: 0 0 16px rgba(0, 0, 0, 0.08);
     }
-    .card[data-slot="prev"] { top: -100%; }
-    .card[data-slot="curr"] { top: 0; }
-    .card[data-slot="next"] { top: 100%; }
+    .card[data-slot="prev"] { left: -100%; }
+    .card[data-slot="curr"] { left: 0; }
+    .card[data-slot="next"] { left: 100%; }
+
+    /* ===== 每日主题封面页 ===== */
+    .cover-card {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #e9e9e9;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .cover-card img.bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .cover-card .dim {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0.78) 100%);
+      pointer-events: none;
+    }
+    .cover-body {
+      position: relative;
+      z-index: 2;
+      margin-top: auto;
+      padding: 32px 28px 48px;
+      color: #fff;
+    }
+    .cover-badge {
+      display: inline-block;
+      font-size: 13px;
+      letter-spacing: 2px;
+      border: 1px solid rgba(255,255,255,0.55);
+      padding: 5px 14px;
+      border-radius: 20px;
+      margin-bottom: 18px;
+    }
+    .cover-title {
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 14px;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .cover-date {
+      font-size: 15px;
+      opacity: 0.85;
+      letter-spacing: 1px;
+    }
+    .cover-hint {
+      position: absolute;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: rgba(255,255,255,0.65);
+      letter-spacing: 1px;
+      animation: hintPulse 2.2s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes hintPulse {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 1; }
+    }
 
     /* ===== 封面图 ===== */
     .cover {
@@ -147,6 +215,9 @@
       stroke-linecap: round;
       stroke-linejoin: round;
     }
+    /* 左右翻页箭头图标 */
+    .nav-btn[data-action="prev"] svg { transform: none; }
+    .nav-btn[data-action="next"] svg { transform: none; }
 
     /* ===== 加载 / 错误状态 ===== */
     .state {
@@ -291,7 +362,7 @@
   <!-- 底部操作栏 -->
   <nav class="bottombar">
     <button class="nav-btn" data-action="prev">
-      <svg viewBox="0 0 24 24"><polyline points="18 15 12 9 6 15"/></svg>
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
       <span>上一篇</span>
     </button>
     <button class="nav-btn" data-action="refresh">
@@ -299,7 +370,7 @@
       <span>刷新</span>
     </button>
     <button class="nav-btn" data-action="next">
-      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
       <span>下一篇</span>
     </button>
     <button class="nav-btn" data-action="about">

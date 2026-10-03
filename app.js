@@ -1,9 +1,9 @@
 /* ============================================================
  * ShortRead - 每日简讯 PWA
  * 原生 JS，无框架依赖
- * 功能：联网拉取每日简讯、上下手势跟随翻页（首尾循环）、
- *       长文滚动与翻页手势隔离、点击卡片打开详情页、
- *       加载/错误状态、ServiceWorker 注册
+ * 功能：联网拉取每日简讯、左右手势跟随翻页（首尾循环）、
+ *       每日主题封面页、长文滚动与翻页手势隔离、
+ *       点击卡片打开详情页、加载/错误状态、ServiceWorker 注册
  * ============================================================ */
 (function () {
   'use strict';
@@ -15,7 +15,7 @@
     'https://60s-api.viki.moe/v2/60s'
   ];
   var FETCH_TIMEOUT = 10000;   // 单次请求超时 ms
-  var SWIPE_THRESHOLD = 80;    // 翻页滑动阈值 px
+  var SWIPE_THRESHOLD = 70;    // 翻页滑动阈值 px（左右）
   var DIRECTION_LOCK = 8;      // 方向判定最小位移 px
 
   /* ---------------- DOM ---------------- */
@@ -99,6 +99,19 @@
     var tip = data.tip || '';
 
     var list = [];
+
+    // 第 0 篇：每日主题封面页（大图 + 日期）
+    var coverImg = data.image || data.cover || '';
+    list.push({
+      isCover: true,
+      cover: coverImg || 'https://picsum.photos/seed/sr-daily/900/1200',
+      coverAlt: 'https://source.unsplash.com/900x1200/?news',
+      title: '每天60秒读懂世界',
+      meta: trimJoin([date, dayOfWeek, lunar], ' · '),
+      intro: '',
+      text: '',
+      date: date
+    });
 
     // 首篇：每日一言（用一句话作标题生成独立配图）
     if (tip) {
@@ -188,8 +201,21 @@
       .map(function (line) { return '<p>' + escapeHtml(line) + '</p>'; }).join('');
   }
 
-  // 列表卡片：顶部配图 + 标题 + 来源日期 + 简介（完整正文在详情页展示）
+  // 列表卡片：封面页（整版大图）或 资讯卡片（配图 + 标题 + 简介）
   function buildCardHtml(article) {
+    if (article.isCover) {
+      var bg = article.cover ? '<img class="bg" src="' + escapeHtml(article.cover) + '" alt="" draggable="false" onerror="this.style.display=\'none\'">' : '';
+      return '<div class="cover-card">' +
+        bg +
+        '<div class="dim"></div>' +
+        '<div class="cover-body">' +
+          '<span class="cover-badge">每日简讯</span>' +
+          '<div class="cover-title">' + escapeHtml(article.title) + '</div>' +
+          '<div class="cover-date">' + escapeHtml(article.meta) + '</div>' +
+        '</div>' +
+        '<div class="cover-hint">左滑开始阅读</div>' +
+      '</div>';
+    }
     var imgHtml = '';
     if (article.cover) {
       imgHtml = '<img src="' + escapeHtml(article.cover) + '"' +
@@ -239,7 +265,9 @@
 
   function openDetail() {
     if (!articles.length || isAnimating || detailOpen) return;
-    fillDetail(articles[currentIndex]);
+    var article = articles[currentIndex];
+    if (article.isCover) return; // 封面页不打开详情
+    fillDetail(article);
     detailEl.classList.add('show');
     detailOpen = true;
     // 压入历史记录：安卓物理返回键可关闭详情页
@@ -303,28 +331,19 @@
 
     if (touch.mode === 'pending') {
       if (Math.abs(dx) < DIRECTION_LOCK && Math.abs(dy) < DIRECTION_LOCK) return false;
-      // 横向滑动：不处理
-      if (Math.abs(dx) > Math.abs(dy)) {
+      // 竖向滑动：让位给内容滚动（简介区/详情页），不触发翻页
+      if (Math.abs(dy) > Math.abs(dx)) {
         touch.mode = 'scroll';
         return false;
       }
-      // 内容可继续滚动时，让位给原生滚动，禁止触发卡片切换
-      var content = touch.contentEl;
-      if (content) {
-        var canScrollUp = content.scrollTop + content.clientHeight < content.scrollHeight - 1;
-        var canScrollDown = content.scrollTop > 1;
-        if ((dy < 0 && canScrollUp) || (dy > 0 && canScrollDown)) {
-          touch.mode = 'scroll';
-          return false;
-        }
-      }
+      // 横向滑动 → 翻页
       touch.mode = 'drag';
       setTransition(false);
     }
 
     if (touch.mode === 'drag') {
-      touch.dy = dy;
-      track.style.transform = 'translateY(' + dy + 'px)';
+      touch.dx = dx;
+      track.style.transform = 'translateX(' + dx + 'px)';
       return true;
     }
     return false;
@@ -345,22 +364,22 @@
       return;
     }
     touch.mode = 'pending';
-    var dy = touch.dy;
+    var dx = touch.dx;
     setTransition(true);
-    if (dy <= -SWIPE_THRESHOLD) {
-      animateFlip(1);   // 上滑 → 下一篇
-    } else if (dy >= SWIPE_THRESHOLD) {
-      animateFlip(-1);  // 下滑 → 上一篇
+    if (dx <= -SWIPE_THRESHOLD) {
+      animateFlip(1);   // 左滑 → 下一篇
+    } else if (dx >= SWIPE_THRESHOLD) {
+      animateFlip(-1);  // 右滑 → 上一篇
     } else {
       // 未达阈值 → 回弹
-      track.style.transform = 'translateY(0)';
+      track.style.transform = 'translateX(0)';
     }
   }
 
   function gestureCancel() {
     if (touch.mode === 'drag') {
       setTransition(true);
-      track.style.transform = 'translateY(0)';
+      track.style.transform = 'translateX(0)';
     }
     touch.active = false;
     touch.mode = 'pending';
@@ -370,7 +389,7 @@
   function animateFlip(dir) {
     if (!articles.length || isAnimating) return;
     setTransition(true);
-    track.style.transform = 'translateY(' + (-100 * dir) + '%)';
+    track.style.transform = 'translateX(' + (-100 * dir) + '%)';
     settleTo(dir);
   }
 
@@ -384,10 +403,13 @@
       track.removeEventListener('transitionend', finish);
       currentIndex = (currentIndex + dir + articles.length) % articles.length;
       setTransition(false);
-      track.style.transform = 'translateY(0)';
+      track.style.transform = 'translateX(0)';
       renderWindow();
-      // 详情页展开中翻页：同步切换详情内容
-      if (detailOpen) fillDetail(articles[currentIndex]);
+      // 详情页展开中翻页：封面页关闭详情，普通资讯同步切换
+      if (detailOpen) {
+        if (articles[currentIndex].isCover) closeDetail(false);
+        else fillDetail(articles[currentIndex]);
+      }
       isAnimating = false;
     }
     track.addEventListener('transitionend', finish);
@@ -446,7 +468,7 @@
       articles = normalize(raw);
       currentIndex = 0;
       setTransition(false);
-      track.style.transform = 'translateY(0)';
+      track.style.transform = 'translateX(0)';
       renderWindow();
       showState(null);
     }).catch(function () {
