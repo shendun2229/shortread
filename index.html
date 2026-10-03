@@ -184,40 +184,84 @@
     }
     .retry-btn:active { background-color: rgba(0, 0, 0, 0.07); }
 
-    /* ===== 简易弹窗 ===== */
-    .toast-mask {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.45);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-    }
-    .toast-mask.show { display: flex; }
-    .toast {
-      background: #fff;
-      border-radius: 14px;
-      padding: 26px 30px;
-      max-width: 78%;
-      text-align: center;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
-      animation: toastIn 0.18s ease-out;
-    }
-    @keyframes toastIn {
-      from { transform: scale(0.92); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
-    }
-    .toast-title {
-      font-size: 17px;
-      font-weight: 600;
-      color: #111;
-      margin-bottom: 10px;
-    }
-    .toast-msg {
+    /* ===== 简介摘要 ===== */
+    .intro {
       font-size: 15px;
       color: #555;
-      line-height: 1.6;
+      line-height: 1.7;
+      margin-top: 14px;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    /* ===== 详情页 ===== */
+    .detail {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 70px;
+      background: #fff;
+      z-index: 12;
+      display: none;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior: contain;
+    }
+    .detail.show {
+      display: block;
+      animation: detailIn 0.22s ease-out;
+    }
+    @keyframes detailIn {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .detail-cover {
+      position: relative;
+      width: 100%;
+      height: 46vh;
+      background: #e9e9e9; /* 图片加载灰色占位 */
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .detail-cover img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .detail-body {
+      padding: 24px;
+      padding-bottom: 32px;
+    }
+    .back-btn {
+      position: fixed;
+      top: 14px; left: 14px;
+      z-index: 13;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 16px 8px 12px;
+      background: rgba(255, 255, 255, 0.92);
+      border: none;
+      border-radius: 20px;
+      color: #333;
+      font-size: 14px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      cursor: pointer;
+      outline: none;
+      transition: background-color 0.15s ease;
+    }
+    .back-btn:active { background-color: rgba(220, 220, 220, 0.95); }
+    .back-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
   </style>
 </head>
@@ -264,11 +308,20 @@
     </button>
   </nav>
 
-  <!-- 简易弹窗 -->
-  <div class="toast-mask" id="toast-mask">
-    <div class="toast">
-      <div class="toast-title" id="toast-title"></div>
-      <div class="toast-msg" id="toast-msg"></div>
+  <!-- 详情页：点击资讯卡片打开 -->
+  <div class="detail" id="detail">
+    <button class="back-btn" id="back-btn">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      <span>返回</span>
+    </button>
+    <div class="detail-cover">
+      <img id="detail-img" alt="" draggable="false">
+      <div class="cover-mask"></div>
+    </div>
+    <div class="detail-body">
+      <h1 class="title" id="detail-title"></h1>
+      <div class="meta" id="detail-meta"></div>
+      <div class="text" id="detail-text"></div>
     </div>
   </div>
 

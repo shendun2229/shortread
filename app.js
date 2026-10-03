@@ -2,8 +2,8 @@
  * ShortRead - 每日简讯 PWA
  * 原生 JS，无框架依赖
  * 功能：联网拉取每日简讯、上下手势跟随翻页（首尾循环）、
- *       长文滚动与翻页手势隔离、加载/错误状态、占位弹窗、
- *       ServiceWorker 注册
+ *       长文滚动与翻页手势隔离、点击卡片打开详情页、
+ *       加载/错误状态、ServiceWorker 注册
  * ============================================================ */
 (function () {
   'use strict';
@@ -30,6 +30,12 @@
   var errorEl = document.getElementById('state-error');
   var errorMsgEl = document.getElementById('error-msg');
   var retryBtn = document.getElementById('retry-btn');
+  var detailEl = document.getElementById('detail');
+  var backBtn = document.getElementById('back-btn');
+  var detailImg = document.getElementById('detail-img');
+  var detailTitle = document.getElementById('detail-title');
+  var detailMeta = document.getElementById('detail-meta');
+  var detailText = document.getElementById('detail-text');
 
   /* ---------------- 内存状态 ---------------- */
   var articles = [];      // 当日文章列表（仅内存，不做持久化）
@@ -56,20 +62,31 @@
     });
   }
 
-  // 将接口响应归一化为 [{ cover, coverAlt, title, meta, text }]
+  // 将接口响应归一化为文章列表
+  // 每条数据结构：{ cover 图片url, coverAlt, title 标题, meta 来源日期,
+  //                intro 简介, text 完整正文, date 日期 }
   function normalize(raw) {
     var data = raw && raw.data ? raw.data : raw;
     if (!data) throw new Error('数据格式错误');
 
-    // 显式文章数组格式：data.articles = [{ cover, title, meta, text }]
+    // 显式文章数组格式：data.articles = [{ cover, title, meta, intro, text, date }]
     if (Array.isArray(data.articles)) {
       var direct = data.articles.map(function (a) {
+        var text = String(a.text || '');
+        var intro = String(a.intro || '');
+        if (!intro) {
+          // 无显式简介时，取正文首段前 60 字
+          var firstPara = text.split(/\n+/).filter(Boolean)[0] || '';
+          intro = firstPara.length > 60 ? firstPara.slice(0, 60) + '…' : firstPara;
+        }
         return {
           cover: a.cover || '',
           coverAlt: a.coverAlt || '',
           title: String(a.title || ''),
           meta: String(a.meta || ''),
-          text: String(a.text || '')
+          intro: intro,
+          text: text,
+          date: String(a.date || '')
         };
       }).filter(function (a) { return a.title || a.text; });
       if (direct.length) return direct;
@@ -92,11 +109,13 @@
         coverAlt: coverAlt,
         title: '今日一言',
         meta: trimJoin([date, dayOfWeek, lunar], ' · '),
-        text: tip
+        intro: tip,
+        text: tip,
+        date: date
       });
     }
 
-    // 新闻条目：冒号前缀作为标题，全句作为正文
+    // 新闻条目：冒号前缀作为标题，全句作为简介与正文
     newsArr.forEach(function (item) {
       var s = String(item || '').trim();
       if (!s) return;
@@ -112,7 +131,9 @@
         coverAlt: coverAlt,
         title: title,
         meta: trimJoin(['每天60s读懂世界', date, dayOfWeek], ' · '),
-        text: s
+        intro: s,
+        text: s,
+        date: date
       });
     });
 
@@ -132,6 +153,13 @@
     });
   }
 
+  // 正文文本 → 段落 HTML
+  function paragraphsHtml(text) {
+    return String(text).split(/\n+/).filter(Boolean)
+      .map(function (line) { return '<p>' + escapeHtml(line) + '</p>'; }).join('');
+  }
+
+  // 列表卡片：顶部配图 + 标题 + 来源日期 + 简介（完整正文在详情页展示）
   function buildCardHtml(article) {
     var imgHtml = '';
     if (article.cover) {
@@ -140,13 +168,11 @@
         ' alt="" draggable="false" onerror="var f=this.getAttribute(\'data-fb\');' +
         'if(f){this.removeAttribute(\'data-fb\');this.src=f;}else{this.style.display=\'none\';}">';
     }
-    var paragraphs = String(article.text).split(/\n+/).filter(Boolean)
-      .map(function (line) { return '<p>' + escapeHtml(line) + '</p>'; }).join('');
     return '<div class="cover">' + imgHtml + '<div class="cover-mask"></div></div>' +
       '<div class="content">' +
         '<h1 class="title">' + escapeHtml(article.title) + '</h1>' +
         '<div class="meta">' + escapeHtml(article.meta) + '</div>' +
-        '<div class="text">' + paragraphs + '</div>' +
+        '<div class="intro">' + escapeHtml(article.intro) + '</div>' +
       '</div>';
   }
 
@@ -159,6 +185,44 @@
     cards.next.innerHTML = buildCardHtml(articles[(currentIndex + 1) % n]);
   }
 
+  /* ================= 详情页 ================= */
+
+  var detailOpen = false;   // 详情页是否展开
+  var detailPushed = false; // 是否已 pushState（安卓返回键支持）
+
+  function fillDetail(article) {
+    detailImg.style.display = article.cover ? '' : 'none';
+    detailImg.onerror = function () { this.style.display = 'none'; }; // 加载失败灰色占位
+    detailImg.src = article.cover || '';
+    detailTitle.textContent = article.title;
+    detailMeta.textContent = article.meta;
+    detailText.innerHTML = paragraphsHtml(article.text);
+    detailEl.scrollTop = 0;
+  }
+
+  function openDetail() {
+    if (!articles.length || isAnimating || detailOpen) return;
+    fillDetail(articles[currentIndex]);
+    detailEl.classList.add('show');
+    detailOpen = true;
+    // 压入历史记录：安卓物理返回键可关闭详情页
+    history.pushState({ sr: 'detail' }, '');
+    detailPushed = true;
+  }
+
+  function closeDetail(fromPop) {
+    if (!detailOpen) return;
+    detailEl.classList.remove('show');
+    detailOpen = false;
+    if (detailPushed && !fromPop) history.back();
+    detailPushed = false;
+  }
+
+  backBtn.addEventListener('click', function () { closeDetail(false); });
+  window.addEventListener('popstate', function () {
+    if (detailOpen) closeDetail(true);
+  });
+
   /* ================= 手势翻页 ================= */
 
   var touch = {
@@ -166,9 +230,14 @@
     mode: 'pending',   // pending | scroll | drag
     startX: 0,
     startY: 0,
+    lastX: 0,
+    lastY: 0,
+    t0: 0,
     dy: 0,
     contentEl: null
   };
+  var TAP_MAX_MOVE = 10;     // 轻点判定：位移小于该值
+  var TAP_MAX_DUR = 350;     // 轻点判定：时长小于该值 ms
 
   function setTransition(on) {
     track.style.transition = on ? 'transform 0.28s ease-out' : 'none';
@@ -180,6 +249,9 @@
     touch.mode = 'pending';
     touch.startX = x;
     touch.startY = y;
+    touch.lastX = x;
+    touch.lastY = y;
+    touch.t0 = Date.now();
     touch.dy = 0;
     touch.contentEl = target && target.closest ? target.closest('.content') : null;
   }
@@ -187,6 +259,8 @@
   // 返回 true 表示需要 preventDefault
   function gestureMove(x, y) {
     if (!touch.active) return false;
+    touch.lastX = x;
+    touch.lastY = y;
     var dx = x - touch.startX;
     var dy = y - touch.startY;
 
@@ -222,6 +296,13 @@
   function gestureEnd() {
     if (!touch.active) return;
     touch.active = false;
+    // 轻点（几乎无位移、短按）→ 打开详情页
+    if (touch.mode === 'pending') {
+      var moved = Math.abs(touch.lastX - touch.startX) + Math.abs(touch.lastY - touch.startY);
+      var duration = Date.now() - touch.t0;
+      if (moved < TAP_MAX_MOVE && duration < TAP_MAX_DUR) openDetail();
+      return;
+    }
     if (touch.mode !== 'drag') {
       touch.mode = 'pending';
       return;
@@ -268,6 +349,8 @@
       setTransition(false);
       track.style.transform = 'translateY(0)';
       renderWindow();
+      // 详情页展开中翻页：同步切换详情内容
+      if (detailOpen) fillDetail(articles[currentIndex]);
       isAnimating = false;
     }
     track.addEventListener('transitionend', finish);
@@ -315,6 +398,7 @@
   /* ================= 加载流程 ================= */
 
   function loadArticles() {
+    closeDetail(false); // 刷新时关闭详情页（同步回退历史记录）
     showState('loading');
     var chain = Promise.reject();
     // 依次尝试接口列表
