@@ -2,7 +2,7 @@
  * 策略：静态资源预缓存（stale-while-revalidate 更新），
  *       文章数据接口始终联网、不做缓存。
  */
-var CACHE_NAME = 'shortread-static-v3';
+var CACHE_NAME = 'shortread-static-v4';
 var STATIC_ASSETS = [
   './',
   './index.html',
