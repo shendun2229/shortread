@@ -93,8 +93,6 @@
     }
 
     var newsArr = Array.isArray(data.news) ? data.news : [];
-    var cover = data.image || data.cover || '';       // 优先当日海报图
-    var coverAlt = data.cover || '';                   // 备用封面
     var date = data.date || '';
     var dayOfWeek = data.day_of_week || '';
     var lunar = data.lunar_date || '';
@@ -102,11 +100,12 @@
 
     var list = [];
 
-    // 首篇：每日一言
+    // 首篇：每日一言（用一句话作标题生成独立配图）
     if (tip) {
+      var tipCovers = buildCovers(tip);
       list.push({
-        cover: cover,
-        coverAlt: coverAlt,
+        cover: tipCovers.cover,
+        coverAlt: tipCovers.coverAlt,
         title: '今日一言',
         meta: trimJoin([date, dayOfWeek, lunar], ' · '),
         intro: tip,
@@ -115,7 +114,7 @@
       });
     }
 
-    // 新闻条目：冒号前缀作为标题，全句作为简介与正文
+    // 新闻条目：冒号前缀作为标题，每条独立生成相关配图
     newsArr.forEach(function (item) {
       var s = String(item || '').trim();
       if (!s) return;
@@ -126,9 +125,10 @@
       } else {
         title = s.length > 22 ? s.slice(0, 22) + '…' : s;
       }
+      var imgs = buildCovers(title);
       list.push({
-        cover: cover,
-        coverAlt: coverAlt,
+        cover: imgs.cover,
+        coverAlt: imgs.coverAlt,
         title: title,
         meta: trimJoin(['每天60s读懂世界', date, dayOfWeek], ' · '),
         intro: s,
@@ -143,6 +143,35 @@
 
   function trimJoin(arr, sep) {
     return arr.filter(function (s) { return !!s; }).join(sep);
+  }
+
+  // 字符串哈希 → 正整数（用于生成稳定的 picsum 种子）
+  function hashSeed(s) {
+    var h = 0;
+    for (var i = 0; i < s.length; i++) {
+      h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    }
+    return (h % 100000) + 1;
+  }
+
+  // 从标题提取英文关键词（用于 unsplash 相关配图搜索）
+  var STOP_WORDS = { the: 1, and: 1, for: 1, with: 1, from: 1, says: 1, after: 1, over: 1, amid: 1, will: 1, into: 1, has: 1, are: 1, its: 1, his: 1, her: 1, new: 1 };
+  function extractKeyword(title) {
+    var words = String(title).toLowerCase().match(/[a-z]{3,}/g) || [];
+    for (var i = 0; i < words.length; i++) {
+      if (!STOP_WORDS[words[i]]) return words[i];
+    }
+    return 'news';
+  }
+
+  // 为每条新闻生成相关配图：
+  // 主图 picsum（按标题哈希稳定，每条不同）；失败回退 unsplash 关键词图
+  function buildCovers(title) {
+    var seed = hashSeed(title);
+    return {
+      cover: 'https://picsum.photos/seed/sr-' + seed + '/900/600',
+      coverAlt: 'https://source.unsplash.com/900x600/?' + encodeURIComponent(extractKeyword(title))
+    };
   }
 
   /* ================= 渲染层 ================= */
@@ -192,7 +221,15 @@
 
   function fillDetail(article) {
     detailImg.style.display = article.cover ? '' : 'none';
-    detailImg.onerror = function () { this.style.display = 'none'; }; // 加载失败灰色占位
+    detailImg.onerror = function () {
+      // 主图失败 → 回退到相关关键词图，再失败隐藏（留灰色占位）
+      var fb = article.coverAlt;
+      if (fb && detailImg.src !== fb) {
+        detailImg.src = fb;
+      } else {
+        this.style.display = 'none';
+      }
+    };
     detailImg.src = article.cover || '';
     detailTitle.textContent = article.title;
     detailMeta.textContent = article.meta;
